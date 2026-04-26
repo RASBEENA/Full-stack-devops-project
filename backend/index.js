@@ -1,28 +1,75 @@
 const express = require('express');
 const cors = require('cors');
+const mysql = require('mysql2');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Pre-filled item list (in-memory)
-let items = [
-  { name: "Apple" },
-  { name: "Banana" },
-  { name: "Carrot" }
-];
+/* =========================
+   DB CONNECTION
+========================= */
+const db = mysql.createConnection({
+  host: "localhost",        // DB is on same EC2
+  user: "root",             // your MariaDB user
+  password: "admin",        // 🔥 replace with your actual password
+  database: "myapp"
+});
 
-// GET all items
+db.connect((err) => {
+  if (err) {
+    console.error("❌ DB connection failed:", err);
+  } else {
+    console.log("✅ Connected to MariaDB");
+  }
+});
+
+/* =========================
+   API ROUTES
+========================= */
+
+// ✅ GET all items
 app.get('/api/items', (req, res) => {
-  res.json(items);
+  db.query("SELECT * FROM items", (err, results) => {
+    if (err) {
+      console.error("❌ Fetch error:", err);
+      return res.status(500).json({ error: "Failed to fetch items" });
+    }
+    res.json(results);
+  });
 });
 
-// POST a new item
+// ✅ POST new item
 app.post('/api/items', (req, res) => {
-  const newItem = { name: req.body.name };
-  items.push(newItem);
-  res.json(newItem);
+  const { name } = req.body;
+
+  if (!name || name.trim() === "") {
+    return res.status(400).json({ error: "Name is required" });
+  }
+
+  db.query(
+    "INSERT INTO items (name) VALUES (?)",
+    [name],
+    (err, result) => {
+      if (err) {
+        console.error("❌ Insert error:", err);
+        return res.status(500).json({ error: "Failed to insert item" });
+      }
+
+      res.json({
+        id: result.insertId,
+        name: name
+      });
+    }
+  );
 });
 
-// Start server
-app.listen(3001, () => console.log("✅ Backend running on http://localhost:3001"));
+/* =========================
+   SERVER
+========================= */
+const PORT = 3001;
+
+// 🔥 IMPORTANT: listen on all IPs for EC2 access
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Backend running on port ${PORT}`);
+});
